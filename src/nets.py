@@ -29,7 +29,8 @@ class DGM(nn.Module):
         self.Wr = nn.Linear(M, M)
         self.Wh = nn.Linear(M, M)
 
-    def forward(self, tx):
+    def forward(self, t, x):
+        tx = torch.stack((t,x), -1)
         S = sigma(self.W0(tx))
         for l in range(self.L):
             Z = sigma(self.Uz(tx) + self.Wz(S))
@@ -74,5 +75,6 @@ class DumbLinear(nn.Module):
         elif arch == '6l': self.main = make_6l(base_width)
         else: raise TypeError("Arg 'arch' must be '3l' or '6l'")
     
-    def forward(self, tx):
+    def forward(self, t, x):
+        tx = torch.stack((t, x), -1)
         return self.main(tx).view(-1)
