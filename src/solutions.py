@@ -115,7 +115,7 @@ class PartialSolver:
         """
         m = 0
         if not isinstance(t, torch.Tensor):
-            t = torch.tensor([t], dtype=torch.float)
+            t = x.new(1).fill_(t)
         out = x.new(len(t), len(x)).fill_(0)
         while True:
             coeff = self.T_k(t, m)
@@ -133,7 +133,7 @@ class PartialSolver:
 #        """
 #        m = 0
 #        if not isinstance(t, torch.Tensor):
-#            t = torch.tensor([t], dtype=torch.float)
+#           t = x.new(1).fill_(t)
 #        out = x.new(len(t), len(x)).fill_(0)
 #        indices = torch.arange(len(t))
 #        mask = indices.clone()

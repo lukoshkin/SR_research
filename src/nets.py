@@ -29,14 +29,14 @@ class DGM(nn.Module):
         self.Wr = nn.Linear(M, M)
         self.Wh = nn.Linear(M, M)
 
-    def forward(self, t, x):
-        tx = torch.stack((t,x), -1)
-        S = sigma(self.W0(tx))
+    def forward(self, *X):
+        X = torch.stack(X, -1)
+        S = sigma(self.W0(X))
         for l in range(self.L):
-            Z = sigma(self.Uz(tx) + self.Wz(S))
-            G = sigma(self.Ug(tx) + self.Wg(S))
-            R = sigma(self.Ur(tx) + self.Wr(S))
-            H = sigma(self.Uh(tx) + self.Wh(S*R))
+            Z = sigma(self.Uz(X) + self.Wz(S))
+            G = sigma(self.Ug(X) + self.Wg(S))
+            R = sigma(self.Ur(X) + self.Wr(S))
+            H = sigma(self.Uh(X) + self.Wh(S*R))
             S = (1-G)*H + Z*S
 
             # remove sigma in the line with H

@@ -1,12 +1,13 @@
 import torch
 from tqdm import trange
 
-def train(net, pde, optimizer, loss_history, num_batches, 
-        batch_size=5120, device='cpu'):
+def train(
+        net, pde, optimizer, loss_history, 
+        num_batches, batch_size=5120):
     for _ in trange(num_batches, desc='Training'):
         optimizer.zero_grad()
 
-        batch = pde.sampleBatch(batch_size, device)
+        batch = pde.sampleBatch(batch_size)
         batch.requires_grad_(True)
 
         loss = pde.computeLoss(batch, net)
