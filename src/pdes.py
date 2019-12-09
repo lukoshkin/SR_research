@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.autograd as autograd
 
 
-class PDEND(nn.Module):
+class PDE(nn.Module):
     """
     Base class.
     Lu = 0, where L is some spatio-temporal operator
@@ -32,12 +32,12 @@ class PDEND(nn.Module):
                 a, b = l
                 assert b > a, 'got incorrect value'
         self.lims = torch.tensor(lims, dtype=torch.float)
-        self._sigma = (self.lims[:, 1] - self.lims[:, 0]).to(device)
-        self._mu = self.lims[:, 0].to(device)
+        self._len = (self.lims[:, 1] - self.lims[:, 0]).to(device)
+        self._shift = self.lims[:, 0].to(device)
 
     def sampleBatch(self, N):
-        return self._sigma * self._mu.new(
-                N, len(self.lims)).uniform_() + self._mu
+        return self._len * self._len.new(
+                N, len(self.lims)).uniform_() + self._shift
     
     def _D(self, y, x):
         grad = autograd.grad(
@@ -50,7 +50,7 @@ class PDEND(nn.Module):
         return grad
 
 
-class AdvectionPDE(PDEND):
+class AdvectionPDE(PDE):
     """
     Homogeneous Advection Equation
     -------------------------------------
@@ -76,7 +76,7 @@ class AdvectionPDE(PDEND):
 
         return L
 
-class FisherPDE(PDEND):
+class FisherPDE(PDE):
     """
     u_t - a u_xx = r u(1-u)
     u(0, x) = phi(x)
@@ -86,7 +86,7 @@ class FisherPDE(PDEND):
     Args:
     -----
     a             diffusion coefficient
-    r             RHS coefficient
+    r             RHS coefficient (one fixed value)
     """
     def __init__(self, initial, a=.1, r=0., l=1., T=1., device='cpu'):
         super().__init__(initial, device, T, l)
@@ -123,7 +123,14 @@ class FisherPDE(PDEND):
 
         return L
 
-class ParametricFisherPDE(PDEND):
+class ParametricFisherPDE(PDE):
+    """
+    Solves F-K equation in the given interval of parameters
+    -----
+    Args:
+    -----
+    r           RHS coefficient (region to explore)
+    """
     def __init__(self, initial, a=.1, r=(2, 4), l=1, T=1, device='cpu'):
         super().__init__(initial, device, T, l, r)
         self.a = a

@@ -1,5 +1,9 @@
 import math
+import numpy as np
 import torch
+
+from utils import tridiagCholesky, solveTridiagCholesky
+
 
 def dome(x, t=0, a=.5, alpha=200., shift=0.):
     """ 
@@ -22,23 +26,39 @@ def dome(x, t=0, a=.5, alpha=200., shift=0.):
 
 def spike(x, alpha=10., shift=.5):
     """
-    Exponential function with discontinuous derivative at `shift`
+    Exponential function with the discontinuous derivative at `shift`
     """
     return torch.exp(-alpha*(x-shift).abs())
 
 
 class FDSolver:
-    def __init__(self, initial, a, l, T, dx, device):
-        self.o = initial(torch.zeros(1, device=device))
-        self.x = torch.linspace(0, l, int(l/dx), device=device)
+    """
+    Base class for explicit finite-difference solver
+    """
+    def __init__(self, initial, l, dx, device):
+        self.x = torch.linspace(0, l, int(l/dx)+1, device=device)
         self.u0 = initial(self.x)
 
-    def __call__(self):
+    def _solveKeepingAll(self):
         out = [self.u0]
-        for i in range(self.N):
+        for _ in range(self.N):
             out.append(self._oneTimeStep(out[-1]))
-
         return out
+
+    def _solveKeepingJustLast(self):
+        u = self.u0
+        for _ in range(self.N):
+            u = self._oneTimeStep(u)
+        return u
+
+    def solve(self, last_only=False):
+        """
+        Returns all layers as a list of arrays if `last_only` is `True`
+        And just the array of last layer values otherwise
+        """
+        if last_only:
+            return self._solveKeepingJustLast()
+        return self._solveKeepingAll()
 
 class AdvectionSolver(FDSolver):
     """
@@ -46,36 +66,61 @@ class AdvectionSolver(FDSolver):
     (homogeneous equation, however, it can easily be extended)
     """
     def __init__(
-            self, initial, a=.5, l=1., T=1.,
-            dx=1e-3, device='cpu'):
-        super().__init__(initial, a, l, T, dx, device)
-        self.C = -.9
-        dt = -self.C*dx/a
-        self.N = int(T/dt)
+            self, initial, a=.5, l=1.,
+            T=1., dx=1e-3, device='cpu'):
+        super().__init__(initial, l, dx, device)
+        self.C = .9
+        self.dt = self.C*dx/a
+        self.N = int(T/self.dt)
 
-    def _oneTimeStep(self , u):
-        return u + torch.cat([self.o, self.C * (u[1:] - u[:-1])])
+    def _oneTimeStep(self, u):
+        return torch.cat([u[0, None], u[1:]-self.C*(u[1:]-u[:-1])])
 
 
-class FisherSolver(FDSolver):
+class ExplicitFisherSolver(FDSolver):
     """
-    Solves Fisher's equation using finite-difference method
+    Solves Fisher's equation using explicit finite-difference scheme
     """
     def __init__(
             self, initial, a=.1, r=0., l=1., T=1.,
             dx=1e-3, device='cpu'):
-        super().__init__(initial, a, l, T, dx, device)
-        self.l = initial(l*torch.ones(1, device=device))
+        super().__init__(initial, l, dx, device)
         self.C1 = .4
-        dt = self.C1 * dx**2 / a
-        self.C2 = r*dt
-        self.N = int(T/dt)
+        self.dt = self.C1*dx**2/a
+        self.C2 = r*self.dt
+        self.N = int(T/self.dt)
 
     def _oneTimeStep(self, u):
         bar_u = .5 * (u[2:] + u[:-2])
         out = u[1:-1] + 2*self.C1*(bar_u-u[1:-1]) + self.C2*bar_u
         out /= 1 + self.C2*bar_u
-        return torch.cat([self.o, out, self.l])
+        return torch.cat([u[0, None], out, u[-1, None]])
+
+class ImplicitFisherSolver(FDSolver):
+    """
+    Solves Fisher's equation using implicit finite-difference scheme
+    (Numpy implementation)
+    """
+    def __init__(self, u0, a=1e-2, r=4., l=1., T=1., dx=1e-3, dt=1e-3):
+        self.u0 = u0
+        self.C1 = a*dt/dx/dx
+        self.C2 = r*dt
+        self.N = int(T/dt)
+
+        M = int(l/dx)+1
+        self.L = tridiagCholesky(1+2*self.C1, -self.C1, M-2)
+
+    def _buildRHS(self, u):
+        bar_u = .5*(u[2:]+u[:-2])
+        rhs = u[1:-1]*(1+self.C2*(1-bar_u))
+        rhs[0] += self.C1*u[0]
+        rhs[-1] += self.C1*u[-1]
+        return rhs
+
+    def _oneTimeStep(self, u):
+        rhs = self._buildRHS(u)
+        x = solveTridiagCholesky(self.L, rhs)
+        return np.r_[u[0], x, u[-1]]
 
 
 class PartialSolver:
@@ -93,10 +138,10 @@ class PartialSolver:
         self.alpha = alpha
         self.l = l
 
-    def X_k(self, x, k):
+    def __X_k(self, x, k):
         return torch.sin(math.pi*k/self.l*x)
 
-    def T_k(self, t, m):
+    def __T_k(self, t, m):
         """
         k = 2m + 1
         """
@@ -107,7 +152,7 @@ class PartialSolver:
         
         return A_k * torch.exp(-((2*m+1)*math.pi/self.l)**2 * self.a*t)
     
-    def __call__(self, t, x, eps=1e-4):
+    def solve(self, t, x, eps=1e-4):
         """
         t       a tensor or a scalar value
         x       must be a tensor to deduce the device
@@ -118,14 +163,18 @@ class PartialSolver:
             t = x.new(1).fill_(t)
         out = x.new(len(t), len(x)).fill_(0)
         while True:
-            coeff = self.T_k(t, m)
-            out += coeff[:, None]*self.X_k(x, 2*m+1)
+            coeff = self.__T_k(t, m)
+            out += coeff[:, None]*self.__X_k(x, 2*m+1)
             if abs(coeff.max()) < eps:
                 break
             m += 1
         return math.exp(-self.alpha*self.l/2) + out
 
-#    def __call__(self, t, x, eps=1e-4):
+# Algorithmically, the code excerpt below should work faster.
+# But in practice, this is not the case for python. I didn't check
+# its c++ implementation nor its jit version
+
+#    def solve(self, t, x, eps=1e-4):
 #        """
 #        t       a tensor or a scalar value
 #        x       must be a tensor to deduce the device
@@ -138,8 +187,8 @@ class PartialSolver:
 #        indices = torch.arange(len(t))
 #        mask = indices.clone()
 #        while indices.nelement():
-#            coeff = self.T_k(t[indices], m)
-#            out[indices] += coeff[:, None]*self.X_k(x, 2*m+1)
+#            coeff = self.__T_k(t[indices], m)
+#            out[indices] += coeff[:, None]*self.__X_k(x, 2*m+1)
 #            mask = (abs(coeff) > eps).nonzero().view(-1)
 #            indices = indices[mask]
 #            m += 1

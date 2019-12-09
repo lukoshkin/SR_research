@@ -42,7 +42,7 @@ class DGM(nn.Module):
             # remove sigma in the line with H
             # if approximating unbounded/growing functions
 
-        return self.W1(S).view(-1)
+        return self.W1(S).squeeze_(-1)
 
 def make_3l(base_width):
     arch_3l =  nn.Sequential(
@@ -77,4 +77,4 @@ class DumbLinear(nn.Module):
     
     def forward(self, t, x):
         tx = torch.stack((t, x), -1)
-        return self.main(tx).view(-1)
+        return self.main(tx).squeeze_(-1)
