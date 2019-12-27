@@ -1,9 +1,9 @@
+import copy
 import numpy as np
 import torch
-from torch.optim import lr_scheduler
 
+from functools import partial
 from tqdm import trange
-from numba import njit
 
 
 # Evaluation metrics
@@ -14,12 +14,8 @@ avg_error = lambda u_exact, u_approx: torch.mean(
 
 
 def train(
-        net, pde, optimizer, loss_history, num_batches,
-        scheduler=None, batch_size=5120):
-
-    if scheduler is None:
-        scheduler = lr_scheduler.MultiStepLR(
-                optimizer, [1e4, 2e4, 3e4, 4e4], .18)
+        net, pde, optimizer, scheduler,
+        loss_history, num_batches, batch_size=512):
 
     for _ in trange(num_batches, desc='Training'):
         optimizer.zero_grad()
@@ -35,29 +31,48 @@ def train(
         scheduler.step()
 
 
-@njit
-def tridiagCholesky(a, b, n):
-    l, m = np.zeros(n), np.zeros(n-1)
-    l[0] = a**.5
-    for i in range(1, n):
-        m[i-1] = b / l[i-1]
-        l[i] = (a - m[i-1]**2)**.5
+class Trainer:
+    def __init__(self, net, pde, optimizer, scheduler, pbar=False):
+        self.No = 0
+        self.best_epoch = 0
+        self.best_score = float('inf')
+        self.best_weights = None
+        self.history = []
 
-    return l, m
+        self.net = net
+        self.pde = pde
+        self.optimizer = optimizer
+        self.scheduler = scheduler
 
-@njit
-def solveTridiagCholesky(L, f):
-    l, m = L
-    n = len(l)
+        self._iter = partial(trange, desc=f'Epoch {self.No}')
+        if not pbar: self._iter = range
 
-    y = np.empty(n)
-    y[0] = f[0]/l[0]
-    for i in range(1, n):
-        y[i] = (f[i] - m[i-1]*y[i-1]) / l[i]
+    def trainOneEpoch(self, num_batches=100, batch_size=512):
+        loss_log = []
+        for _ in self._iter(num_batches):
+            self.optimizer.zero_grad()
 
-    x = np.empty(n)
-    x[-1] = y[-1]/l[-1]
-    for i in range(n-2, -1, -1):
-        x[i] = (y[i] - m[i]*x[i+1]) / l[i]
+            batch = self.pde.sampleBatch(batch_size)
+            batch.requires_grad_(True)
 
-    return x
+            loss = self.pde.computeLoss(batch, self.net)
+            loss_log.append(loss.item())
+            loss.backward()
+
+            self.optimizer.step()
+        self.scheduler.step()
+        self.history.append(np.mean(loss_log))
+        self.No += 1
+
+    def validate(self, X, Y):
+        current_score = torch.mean((Y - self.net(*X))**2).item()
+        if current_score < self.best_score:
+            self.best_epoch = self.No
+            self.best_score = current_score
+            self.best_weights = copy.deepcopy(self.net.state_dict())
+
+    def terminate(self):
+        if self.best_weights is not None:
+            self.net.load_state_dict(self.best_weights)
+        print(f'Best validation score is {self.best_score}')
+        print(f'Achived at epoch #{self.best_epoch}')
