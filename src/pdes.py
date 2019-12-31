@@ -54,47 +54,84 @@ class AdvectionPDE(PDE):
     """
     Homogeneous Advection Equation
     -------------------------------------
-    du/dt + a du/dx = 0
-    u(0, x) = phi(x)
-    u(t, 0) = phi(0)
+    du/dt + a du/dx = f(t,x,u)
+    u(0,x) = phi(x)
+    u(t,0) = phi(0)
     -------------------------------------
     Args:
     -----
-    a                 wave velocity
+    a               wave velocity
+
+    rhs             additional term in the diff. equation
+                    that can be written as the source term.
+                    It takes 3 positional arguments: t, x, u
+
+    r               Damping factor for balancing diff. operator
+                    and BCs approximation losses. It should be
+                    already accounted in rhs
     """
-    def __init__(self, initial, a=.5, l=1., T=2., device='cpu'):
+    def __init__(
+            self, initial, a=.5, l=1., T=2., r=1.,
+            rhs=lambda t,x,u: 0, device='cpu'):
         super().__init__(initial, device, T, l)
         self.a = a
+        self.r = r
+        self.rhs = rhs
 
     def computeLoss(self, tx, net):
         t, x = tx.unbind(1)
         o = torch.zeros_like(t)
-        u_t, u_x = self._D(net(t,x), (t,x))
-        L = (torch.norm(u_t + self.a * u_x)
+
+        u = net(t, x)
+        u_t, u_x = self._D(u, (t,x))
+        L = (torch.norm(self.r*(u_t+self.a*u_x) - self.rhs(t, x, u))
              + torch.norm(net(o, x) - self.phi(x))
              + torch.norm(net(t, o) - self.phi(o[0])))
 
         return L
 
+
 class FisherPDE(PDE):
     """
     u_t - a u_xx = r u(1-u)
-    u(0, x) = phi(x)
-    u(t, 0) = phi(0)
-    u(t, l) = phi(l)
+    u(0,x) = phi(x)
+    u(t,0) = phi(0)
+    u(t,l) = phi(l)
     ----------
     Args:
     -----
     a             diffusion coefficient
     r             RHS coefficient (one fixed value)
     """
-    def __init__(self, initial, a=.1, r=0., l=1., T=1., device='cpu'):
+    def __init__(
+            self, initial, a=.1, r=0., l=1., T=1.,
+            device='cpu', useAV=False):
         super().__init__(initial, device, T, l)
         self.a = a
-        self.r = r
         self.l = l
+        self.r = r
 
-    def computeLoss(self, tx, net, delta=.001):
+        self._d = 1./abs(r) if abs(r) > 1. else 1.
+        self.computeLoss = self._lossWithAV if useAV else self._casualLoss
+
+    def _casualLoss(self, tx, net):
+        t, x = torch.unbind(tx, 1)
+        o = torch.zeros_like(t)
+        l = torch.empty_like(x).fill_(self.l)
+
+        u = net(t, x)
+        u_t, u_x = self._D(u, (t,x))
+        u_xx = self._D(u_x, x)
+
+        diff_op_loss = self._d*(u_t - self.a*u_xx - self.r*u*(1-u))
+        L = (torch.norm(diff_op_loss)
+             + torch.norm(net(o, x) - self.phi(x))
+             + torch.norm(net(t, o) - self.phi(o[0]))
+             + torch.norm(net(t, l) - self.phi(l[0])))
+
+        return L
+
+    def _lossWithAV(self, tx, net, delta=1e-3):
         t, x = torch.unbind(tx, 1)
         o = torch.zeros_like(t)
         l = torch.empty_like(x).fill_(self.l)
@@ -111,10 +148,10 @@ class FisherPDE(PDE):
         u1_xx_1m = denom * (self._D(net(t, x-D1), x) - u_x) * D1
         u2_xx_1m = denom * (self._D(net(t, x-D2), x) - u_x) * D2
 
-        G_a1 = (u_t - self.a*u1_xx_1p - self.r*y0*(1-y0))
-        G_a2 = (u_t - self.a*u2_xx_1p - self.r*y0*(1-y0))
-        G_b1 = (u_t + self.a*u1_xx_1m - self.r*y0*(1-y0))
-        G_b2 = (u_t + self.a*u2_xx_1m - self.r*y0*(1-y0))
+        G_a1 = self._d*(u_t - self.a*u1_xx_1p - self.r*y0*(1-y0))
+        G_a2 = self._d*(u_t - self.a*u2_xx_1p - self.r*y0*(1-y0))
+        G_b1 = self._d*(u_t + self.a*u1_xx_1m - self.r*y0*(1-y0))
+        G_b2 = self._d*(u_t + self.a*u2_xx_1m - self.r*y0*(1-y0))
 
         L = (torch.mean(G_a1.detach()*G_a2 + G_b1.detach()*G_b2)
              + torch.norm(net(o, x) - self.phi(x))
@@ -122,6 +159,7 @@ class FisherPDE(PDE):
              + torch.norm(net(t, l) - self.phi(l[0])))
 
         return L
+
 
 class ParametricFisherPDE(PDE):
     """
@@ -136,7 +174,7 @@ class ParametricFisherPDE(PDE):
         self.a = a
         self.l = l
 
-    def computeLoss(self, txr, net, delta=.001):
+    def computeLoss(self, txr, net, delta=1e-3):
         t, x, r = torch.unbind(txr, 1)
         o = torch.zeros_like(t)
         l = torch.empty_like(x).fill_(self.l)

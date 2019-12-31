@@ -92,7 +92,6 @@ dependencies:
     - prompt-toolkit==2.0.9
     - protobuf==3.9.2
     - ptyprocess==0.6.0
-    - pydens==0.1.2
     - pygments==2.4.2
     - pyparsing==2.4.2
     - pyrsistent==0.15.4
