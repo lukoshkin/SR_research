@@ -44,12 +44,13 @@ class Trainer:
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-        self._iter = partial(trange, desc=f'Epoch {self.No}')
-        if not pbar: self._iter = range
+        self._iter = lambda n,s: trange(n, desc=s)
+        if not pbar: self._iter = lambda n, s: range(n)
+        self.meta = None
 
     def trainOneEpoch(self, num_batches=100, batch_size=512):
         loss_log = []
-        for _ in self._iter(num_batches):
+        for _ in self._iter(num_batches, f'Epoch {self.No}'):
             self.optimizer.zero_grad()
 
             batch = self.pde.sampleBatch(batch_size)
@@ -64,13 +65,15 @@ class Trainer:
         self.history.append(np.mean(loss_log))
         self.No += 1
 
-    def trackTrainScore(self):
+    def trackTrainingScore(self):
+        self.meta = 'tranining'
         if self.history[-1] < self.best_score:
             self.best_epoch = self.No
             self.best_score = self.history[-1]
             self.best_weights = copy.deepcopy(self.net.state_dict())
 
     def validate(self, X, Y):
+        self.meta = 'validation'
         current_score = torch.mean((Y - self.net(*X))**2).item()
         if current_score < self.best_score:
             self.best_epoch = self.No
@@ -80,5 +83,33 @@ class Trainer:
     def terminate(self):
         if self.best_weights is not None:
             self.net.load_state_dict(self.best_weights)
-        print(f'Best validation score is {self.best_score}')
+        print(f'Best {self.meta} score is {self.best_score}')
         print(f'Achived at epoch #{self.best_epoch}')
+
+
+class SepLossTrainer(Trainer):
+    def __init__(self, net, pde, optimizer, scheduler, pbar=False):
+        super().__init__(net, pde, optimizer, scheduler, pbar)
+        self.do_loss_history, self.bc_loss_history = [], []
+
+    def trainOneEpoch(self, num_batches=100, batch_size=512):
+        do_llog, bc_llog = [], []   # loss logs
+        for _ in self._iter(num_batches, f'Epoch {self.No}'):
+            self.optimizer.zero_grad()
+
+            batch = self.pde.sampleBatch(batch_size)
+            batch.requires_grad_(True)
+
+            L_do, L_bc = self.pde.computeLoss(batch, self.net)
+            do_llog.append(L_do.item())
+            bc_llog.append(L_bc.item())
+            (L_do + L_bc).backward()
+
+            self.optimizer.step()
+        self.scheduler.step()
+
+        a, b = np.mean(do_llog), np.mean(bc_llog)
+        self.do_loss_history.append(a)
+        self.bc_loss_history.append(b)
+        self.history.append(a+b)
+        self.No += 1
