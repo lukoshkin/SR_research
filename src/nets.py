@@ -6,10 +6,10 @@ sigma = torch.tanh
 class DGMCell(nn.Module):
     def __init__(self, d, M, growing):
         super().__init__()
-        self.Uz = nn.Linear(d+1, M, bias=False)
-        self.Ug = nn.Linear(d+1, M, bias=False)
-        self.Ur = nn.Linear(d+1, M, bias=False)
-        self.Uh = nn.Linear(d+1, M, bias=False)
+        self.Uz = nn.Linear(d, M, bias=False)
+        self.Ug = nn.Linear(d, M, bias=False)
+        self.Ur = nn.Linear(d, M, bias=False)
+        self.Uh = nn.Linear(d, M, bias=False)
 
         self.Wz = nn.Linear(M, M)
         self.Wg = nn.Linear(M, M)
@@ -34,22 +34,29 @@ class ResNetLikeDGM(nn.Module):
     DGM algorithm from https://arxiv.org/pdf/1708.07469.pdf
     Args:
     -----
-    d - dimension of the problem
+    d_in and d_out- input and ouput dimensions of the problem
     M - layers' width
     L - recurrency depth
     """
-    def __init__(self, d, M=50, L=3, growing=False):
+    def __init__(
+            self, d_in, d_out, M=50, L=3,
+            growing=False, as_array=True):
         super().__init__()
-        self.W0 = nn.Linear(d+1, M)
-        self.W1 = nn.Linear(M, 1)
+        self.W0 = nn.Linear(d_in, M)
+        self.W1 = nn.Linear(M, d_out)
+        self._convert = self._set_convert(as_array)
 
         self.layers = []
         for l in range(L):
-            self.layers.append(DGMCell(d, M, growing))
+            self.layers.append(DGMCell(d_in, M, growing))
         self.layers = nn.Sequential(*self.layers)
 
+    def _set_convert(self, flag):
+        if flag: return lambda X: X[0]
+        return lambda X: torch.stack(X, -1)
+
     def forward(self, *X):
-        X = torch.stack(X, -1)
+        X = self._convert(X)
         S = sigma(self.W0(X))
         S,_ = self.layers((S, X))
         return self.W1(S).squeeze_(-1)
@@ -59,19 +66,26 @@ class RNNLikeDGM(DGMCell):
     """
     Args:
     -----
-    d - dimension of the problem
+    d_in and d_out- input and ouput dimensions of the problem
     M - layers' width
     L - recurrency depth
     """
-    def __init__(self, d, M=50, L=3, growing=False):
-        super().__init__(d, M, growing)
+    def __init__(
+            self, d_in, d_out, M=50, L=3,
+            growing=False, as_array=True):
+        super().__init__(d_in, M, growing)
         self.L = L
 
-        self.W0 = nn.Linear(d+1, M)
-        self.W1 = nn.Linear(M, 1)
+        self.W0 = nn.Linear(d_in, M)
+        self.W1 = nn.Linear(M, d_out)
+        self._convert = self._set_convert(as_array)
+
+    def _set_convert(self, flag):
+        if flag: return lambda X: X[0]
+        return lambda X: torch.stack(X, -1)
 
     def forward(self, *X):
-        X = torch.stack(X, -1)
+        X = self._convert(X)
         S = sigma(self.W0(X))
         for l in range(self.L):
             Z = sigma(self.Uz(X) + self.Wz(S))

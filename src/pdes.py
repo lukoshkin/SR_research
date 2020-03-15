@@ -1,3 +1,6 @@
+import math
+from functools import partial
+
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
@@ -11,7 +14,7 @@ class PDE(nn.Module):
     ----------
     Args:
     -----
-    initial         intial distribution of the function u
+    initial         intial distribution of the function u at some time t0
     lims            limits specifying the training domain.
                     It should be pairs `(a,b)` or just right
                     endpoint `b`
@@ -55,8 +58,8 @@ class AdvectionPDE(PDE):
     Homogeneous Advection Equation
     -------------------------------------
     du/dt + a du/dx = f(t,x,u)
-    u(0,x) = phi(x)
-    u(t,0) = phi(0)
+    u(t_0,x) = phi(x)
+    u(t,x_0) = phi(0)
     -------------------------------------
     Args:
     -----
@@ -80,13 +83,14 @@ class AdvectionPDE(PDE):
 
     def computeLoss(self, tx, net):
         t, x = tx.unbind(1)
-        o = torch.zeros_like(t)
+        t0 = torch.empty_like(t).fill_(self.lims[0, 0])
+        x0 = torch.empty_like(t).fill_(self.lims[1, 0])
 
         u = net(t, x)
         u_t, u_x = self._D(u, (t,x))
         L = (torch.norm(self.r*(u_t+self.a*u_x) - self.rhs(t, x, u))
-             + torch.norm(net(o, x) - self.phi(x))
-             + torch.norm(net(t, o) - self.phi(o[0])))
+             + torch.norm(net(t0, x) - self.phi(x))
+             + torch.norm(net(t, x0) - self.phi(x0[0])))
 
         return L
 
@@ -94,8 +98,8 @@ class AdvectionPDE(PDE):
 class FisherPDE(PDE):
     """
     u_t - a u_xx = r u(1-u)
-    u(0,x) = phi(x)
-    u(t,0) = phi(0)
+    u(t_0,x) = phi(x)
+    u(t,x_0) = phi(0)
     u(t,l) = phi(l)
     ----------
     Args:
@@ -116,7 +120,8 @@ class FisherPDE(PDE):
 
     def _casualLoss(self, tx, net):
         t, x = torch.unbind(tx, 1)
-        o = torch.zeros_like(t)
+        t0 = torch.empty_like(t).fill_(self.lims[0, 0])
+        x0 = torch.empty_like(t).fill_(self.lims[1, 0])
         l = torch.empty_like(x).fill_(self.l)
 
         u = net(t, x)
@@ -125,15 +130,16 @@ class FisherPDE(PDE):
 
         diff_op_loss = self._d*(u_t - self.a*u_xx - self.r*u*(1-u))
         L = (torch.norm(diff_op_loss)
-             + torch.norm(net(o, x) - self.phi(x))
-             + torch.norm(net(t, o) - self.phi(o[0]))
+             + torch.norm(net(t0, x) - self.phi(x))
+             + torch.norm(net(t, x0) - self.phi(x0[0]))
              + torch.norm(net(t, l) - self.phi(l[0])))
 
         return L
 
     def _lossWithAV(self, tx, net, delta=1e-3):
         t, x = torch.unbind(tx, 1)
-        o = torch.zeros_like(t)
+        t0 = torch.empty_like(t).fill_(self.lims[0, 0])
+        x0 = torch.empty_like(t).fill_(self.lims[1, 0])
         l = torch.empty_like(x).fill_(self.l)
 
         D1 = delta * torch.randn_like(x)
@@ -154,8 +160,8 @@ class FisherPDE(PDE):
         G_b2 = self._d*(u_t + self.a*u2_xx_1m - self.r*y0*(1-y0))
 
         L = (torch.mean(G_a1.detach()*G_a2 + G_b1.detach()*G_b2)
-             + torch.norm(net(o, x) - self.phi(x))
-             + torch.norm(net(t, o) - self.phi(o[0]))
+             + torch.norm(net(t0, x) - self.phi(x))
+             + torch.norm(net(t, x0) - self.phi(x0[0]))
              + torch.norm(net(t, l) - self.phi(l[0])))
 
         return L
@@ -176,7 +182,8 @@ class ParametricFisherPDE(PDE):
 
     def computeLoss(self, txr, net, delta=1e-3):
         t, x, r = torch.unbind(txr, 1)
-        o = torch.zeros_like(t)
+        t0 = torch.empty_like(t).fill_(self.lims[0, 0])
+        x0 = torch.empty_like(t).fill_(self.lims[1, 0])
         l = torch.empty_like(x).fill_(self.l)
 
         D1 = delta * torch.randn_like(x)
@@ -197,8 +204,45 @@ class ParametricFisherPDE(PDE):
         G_b2 = (u_t + self.a*u2_xx_1m - r*y0*(1-y0))
 
         L = (torch.mean(G_a1.detach()*G_a2 + G_b1.detach()*G_b2)
-             + torch.norm(net(o, x, r) - self.phi(x))
-             + torch.norm(net(t, o, r) - self.phi(o[0]))
+             + torch.norm(net(t0, x, r) - self.phi(x))
+             + torch.norm(net(t, x0, r) - self.phi(x0[0]))
              + torch.norm(net(t, l, r) - self.phi(l[0])))
 
         return L
+
+
+def pulse(x, a, phi, tau):
+    out = a * torch.sin(math.pi*x/tau)**2 * torch.sin(x-tau/2+phi)
+    out[x>=tau] = 0
+    out[x<0] = 0
+    return out
+
+class ThinFoilSPDE(PDE):
+    """
+    """
+    def __init__(
+            self, initial, A0, xi_0, tau, theta, l=1., device='cpu'):
+        super().__init__(initial, device, l)
+        self.phi = self.phi.to(device)
+        self.Py = partial(pulse, a=A0[0], phi=xi_0[0], tau=tau)
+        self.Pz = partial(pulse, a=A0[1], phi=xi_0[1], tau=tau)
+        self.e = 200*theta
+
+    def computeLoss(self, xi, net):
+        x,y,z,h = net(xi).unbind(1) 
+
+        u_y = self.Py(xi) - self.e*y
+        u_z = self.Pz(xi) - self.e*z
+        u_ps = u_y**2 + u_z**2
+
+        L0 = torch.norm(net(xi.new([0.]))-self.phi)
+        L1 = torch.norm(2*self._D(x,xi)*h**2-(1+u_ps-h**2))
+        L2 = torch.norm(h*self._D(y,xi)-u_y)
+        L3 = torch.norm(h*self._D(z,xi)-u_z)
+        L4 = torch.norm(
+                self._D(h,xi)-self.e*(
+                    torch.tanh(8*x/theta)-u_ps/(1+u_ps)))
+
+        return (L1/torch.norm(h**2).item()
+                + (L2+L3)/torch.norm(h).item()
+                + L4/math.sqrt(len(xi)) + L0)

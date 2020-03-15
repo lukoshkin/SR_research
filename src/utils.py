@@ -64,6 +64,12 @@ class Trainer:
         self.history.append(np.mean(loss_log))
         self.No += 1
 
+    def trackTrainScore(self):
+        if self.history[-1] < self.best_score:
+            self.best_epoch = self.No
+            self.best_score = self.history[-1]
+            self.best_weights = copy.deepcopy(self.net.state_dict())
+
     def validate(self, X, Y):
         current_score = torch.mean((Y - self.net(*X))**2).item()
         if current_score < self.best_score:
