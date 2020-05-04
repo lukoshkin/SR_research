@@ -3,7 +3,10 @@ import numpy as np
 import torch
 
 from functools import partial
-from tqdm import trange
+from tqdm.autonotebook import trange
+
+import matplotlib.pyplot as plt
+from matplotlib import cm
 
 
 # Evaluation metrics
@@ -13,7 +16,7 @@ avg_error = lambda u_exact, u_approx: torch.mean(
         (u_exact - u_approx)**2)**.5
 
 
-def train(
+def simple_train(
         net, pde, optimizer, scheduler,
         loss_history, num_batches, batch_size=512):
 
@@ -21,8 +24,6 @@ def train(
         optimizer.zero_grad()
 
         batch = pde.sampleBatch(batch_size)
-        batch.requires_grad_(True)
-
         loss = pde.computeLoss(batch, net)
         loss_history.append(loss.item())
         loss.backward()
@@ -44,9 +45,11 @@ class Trainer:
         self.optimizer = optimizer
         self.scheduler = scheduler
 
+        self.meta = None
+        self._sbatch = None
+        self._eps_0, self._eps_r = 1., 0.
         self._iter = lambda n,s: trange(n, desc=s)
         if not pbar: self._iter = lambda n, s: range(n)
-        self.meta = None
 
     def trainOneEpoch(self, num_batches=100, batch_size=512):
         loss_log = []
@@ -54,8 +57,6 @@ class Trainer:
             self.optimizer.zero_grad()
 
             batch = self.pde.sampleBatch(batch_size)
-            batch.requires_grad_(True)
-
             loss = self.pde.computeLoss(batch, self.net)
             loss_log.append(loss.item())
             loss.backward()
@@ -64,6 +65,40 @@ class Trainer:
         self.scheduler.step()
         self.history.append(np.mean(loss_log))
         self.No += 1
+
+    def trainOneEpochWithRAR(self, num_batches=100, batch_size=512):
+        loss_log = []
+        for _ in self._iter(num_batches, f'Epoch {self.No}'):
+            self.optimizer.zero_grad()
+            if self._eps_r < self._eps_0:
+                self._sbatch, self._eps_0 = self._makeSupportBatch(batch_size)
+
+            batch = self.pde.sampleBatch(batch_size)
+            batch_2x = torch.cat([batch, self._sbatch])
+            loss = self.pde.computeLoss(batch_2x, self.net)
+            loss_log.append(loss.item())
+            loss.backward()
+
+            self.optimizer.step()
+            self._eps_r,_ = self.pde.computeLoss(self._sbatch, self.net)
+        self.scheduler.step()
+        self.history.append(np.mean(loss_log))
+        self.No += 1
+
+    def _makeSupportBatch(self, batch_size, k):
+        """
+        Residual-based Adaptive Refinement
+        Section 2.8, https://arxiv.org/pdf/1907.04502.pdf
+        ---
+        Unfortunately, in the current implementation,
+        it is only possible to make differential op-r refinement
+        """
+        batch = self.pde.sampleBatch(k*batch_size)
+        R_do,*_ = self.pde.computeResiduals(batch, self.net)
+        values, indices = R_do.detach().sort()
+        support_batch = batch[indices[-batch_size:]]
+        eps_0 = values[:k//2*batch_size].mean().item()
+        return support_batch, eps_0
 
     def trackTrainingScore(self):
         self.meta = 'tranining'
@@ -85,31 +120,3 @@ class Trainer:
             self.net.load_state_dict(self.best_weights)
         print(f'Best {self.meta} score is {self.best_score}')
         print(f'Achived at epoch #{self.best_epoch}')
-
-
-class SepLossTrainer(Trainer):
-    def __init__(self, net, pde, optimizer, scheduler, pbar=False):
-        super().__init__(net, pde, optimizer, scheduler, pbar)
-        self.do_loss_history, self.bc_loss_history = [], []
-
-    def trainOneEpoch(self, num_batches=100, batch_size=512):
-        do_llog, bc_llog = [], []   # loss logs
-        for _ in self._iter(num_batches, f'Epoch {self.No}'):
-            self.optimizer.zero_grad()
-
-            batch = self.pde.sampleBatch(batch_size)
-            batch.requires_grad_(True)
-
-            L_do, L_bc = self.pde.computeLoss(batch, self.net)
-            do_llog.append(L_do.item())
-            bc_llog.append(L_bc.item())
-            (L_do + L_bc).backward()
-
-            self.optimizer.step()
-        self.scheduler.step()
-
-        a, b = np.mean(do_llog), np.mean(bc_llog)
-        self.do_loss_history.append(a)
-        self.bc_loss_history.append(b)
-        self.history.append(a+b)
-        self.No += 1

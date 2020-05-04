@@ -1,24 +1,47 @@
 name: SR
 channels:
   - pytorch
+  - conda-forge
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
+  - backcall=0.1.0=py_0
   - blas=1.0=mkl
-  - ca-certificates=2019.8.28=0
-  - certifi=2019.9.11=py37_0
+  - bleach=3.1.4=pyh9f0ad1d_0
+  - ca-certificates=2020.4.5.1=hecc5488_0
+  - certifi=2020.4.5.1=py37hc8dfbb8_0
   - cffi=1.12.3=py37h2e261b9_0
   - cpuonly=1.0=0
+  - defusedxml=0.6.0=py_0
+  - entrypoints=0.3=py37hc8dfbb8_1001
   - freetype=2.9.1=h8a8886c_1
+  - icu=64.2=he1b5a44_1
+  - importlib-metadata=1.6.0=py37hc8dfbb8_0
+  - importlib_metadata=1.6.0=0
   - intel-openmp=2019.4=243
+  - ipython_genutils=0.2.0=py_1
   - jpeg=9b=h024ee3a_2
+  - jupyter_client=6.1.2=py_0
+  - jupyter_contrib_core=0.3.3=py_2
+  - jupyter_contrib_nbextensions=0.5.1=py37_0
+  - jupyter_core=4.6.3=py37hc8dfbb8_1
+  - jupyter_highlight_selected_word=0.2.0=py37_1000
+  - jupyter_latex_envs=1.4.6=py37_1000
+  - jupyter_nbextensions_configurator=0.4.1=py37_0
   - libedit=3.1.20181209=hc058e9b_0
   - libffi=3.2.1=hd88cf55_4
   - libgcc-ng=9.1.0=hdf63c60_0
   - libgfortran-ng=7.3.0=hdf63c60_0
+  - libiconv=1.15=h516909a_1006
   - libpng=1.6.37=hbc83047_0
+  - libsodium=1.0.17=h516909a_0
   - libstdcxx-ng=9.1.0=hdf63c60_0
   - libtiff=4.0.10=h2733197_2
+  - libxml2=2.9.10=hee79883_0
+  - libxslt=1.1.33=h31b3aaa_0
+  - lxml=4.5.0=py37he3881c9_1
+  - markupsafe=1.1.1=py37h8f50634_1
+  - mistune=0.8.4=py37h516909a_1000
   - mkl=2019.4=243
   - mkl-service=2.3.0=py37he904b0f_0
   - mkl_fft=1.0.14=py37ha843d7b_0
@@ -27,31 +50,37 @@ dependencies:
   - ninja=1.9.0=py37hfd86e86_0
   - numpy-base=1.17.2=py37hde5b4d6_0
   - olefile=0.46=py37_0
-  - openssl=1.1.1d=h7b6447c_2
+  - openssl=1.1.1f=h516909a_0
+  - pandoc=2.9.2=0
+  - pickleshare=0.7.5=py37hc8dfbb8_1001
   - pip=19.2.3=py37_0
+  - prometheus_client=0.7.1=py_0
+  - ptyprocess=0.6.0=py_1001
   - pycparser=2.19=py37_0
   - python=3.7.4=h265db76_1
+  - python_abi=3.7=1_cp37m
   - pytorch=1.2.0=py3.7_cpu_0
+  - pyyaml=5.3.1=py37h8f50634_0
   - readline=7.0=h7b6447c_5
+  - send2trash=1.5.0=py_0
   - setuptools=41.2.0=py37_0
   - sqlite=3.29.0=h7b6447c_0
   - tk=8.6.8=hbc83047_0
   - torchvision=0.4.0=py37_cpu
   - wheel=0.33.6=py37_0
   - xz=5.2.4=h14c3975_4
+  - yaml=0.2.2=h516909a_1
+  - zeromq=4.3.2=he1b5a44_2
+  - zipp=3.1.0=py_0
   - zlib=1.2.11=h7b6447c_3
   - zstd=1.3.7=h0b5b093_0
   - pip:
     - absl-py==0.8.0
     - astor==0.8.0
     - attrs==19.2.0
-    - backcall==0.1.0
-    - bleach==3.1.1
     - cycler==0.10.0
     - decorator==4.4.0
-    - defusedxml==0.6.0
     - dill==0.3.1.1
-    - entrypoints==0.3
     - gast==0.2.2
     - google-pasta==0.1.7
     - grpcio==1.24.0
@@ -73,11 +102,9 @@ dependencies:
     - kiwisolver==1.1.0
     - llvmlite==0.29.0
     - markdown==3.1.1
-    - markupsafe==1.1.1
     - matplotlib==3.1.1
-    - mistune==0.8.4
     - nbconvert==5.6.0
-    - nbformat==4.4.0
+    - nbformat==5.0.5
     - networkx==2.3
     - notebook==6.0.1
     - numba==0.45.1
@@ -86,12 +113,9 @@ dependencies:
     - pandocfilters==1.4.2
     - parso==0.5.1
     - pexpect==4.7.0
-    - pickleshare==0.7.5
     - pillow==6.2.0
-    - prometheus-client==0.7.1
     - prompt-toolkit==2.0.9
     - protobuf==3.9.2
-    - ptyprocess==0.6.0
     - pygments==2.4.2
     - pyparsing==2.4.2
     - pyrsistent==0.15.4
@@ -101,7 +125,6 @@ dependencies:
     - qtconsole==4.5.5
     - scikit-image==0.15.0
     - scipy==1.3.1
-    - send2trash==1.5.0
     - six==1.12.0
     - termcolor==1.1.0
     - terminado==0.8.2
