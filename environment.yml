@@ -59,14 +59,12 @@ dependencies:
   - pycparser=2.19=py37_0
   - python=3.7.4=h265db76_1
   - python_abi=3.7=1_cp37m
-  - pytorch=1.2.0=py3.7_cpu_0
   - pyyaml=5.3.1=py37h8f50634_0
   - readline=7.0=h7b6447c_5
   - send2trash=1.5.0=py_0
   - setuptools=41.2.0=py37_0
   - sqlite=3.29.0=h7b6447c_0
   - tk=8.6.8=hbc83047_0
-  - torchvision=0.4.0=py37_cpu
   - wheel=0.33.6=py37_0
   - xz=5.2.4=h14c3975_4
   - yaml=0.2.2=h516909a_1
@@ -81,6 +79,7 @@ dependencies:
     - cycler==0.10.0
     - decorator==4.4.0
     - dill==0.3.1.1
+    - future==0.18.2
     - gast==0.2.2
     - google-pasta==0.1.7
     - grpcio==1.24.0
@@ -104,7 +103,7 @@ dependencies:
     - markdown==3.1.1
     - matplotlib==3.1.1
     - nbconvert==5.6.0
-    - nbformat==5.0.5
+    - nbformat==4.4.0
     - networkx==2.3
     - notebook==6.0.1
     - numba==0.45.1
@@ -129,6 +128,8 @@ dependencies:
     - termcolor==1.1.0
     - terminado==0.8.2
     - testpath==0.4.2
+    - torch==1.5.0+cpu
+    - torchvision==0.6.0+cpu
     - tornado==6.0.3
     - tqdm==4.36.1
     - traitlets==4.3.2

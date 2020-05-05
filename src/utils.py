@@ -1,6 +1,8 @@
 import copy
 import numpy as np
+
 import torch
+from torch.optim.lr_scheduler import StepLR 
 
 from functools import partial
 from tqdm.autonotebook import trange
@@ -57,7 +59,7 @@ class SepLossTrainer:
 
     def linearWarmUp(
             self, w, num_iters, batch_size,
-            lr_lims=None, range_test=False, explosion_ratio=1.4):
+            lr_lims=None, range_test=False, explosion_ratio=None):
         """
         Network warm up with linear increasing LR from some small value
         If `range_test` is `True`, then test on more relevant LR will be
@@ -93,13 +95,14 @@ class SepLossTrainer:
             (w@L).backward()
 
             self.optimizer.step()
-            if (explosion_ratio*loss_logs[0].mean() < (w@L).item()):
-                print('early stop due to loss explosion')
+            if (explosion_ratio is not None
+                    and explosion_ratio*loss_logs[0].mean() < (w@L).item()):
+                print('early stop due to the loss explosion')
                 break
         self.optimizer.load_state_dict(opt_dict)
         if range_test:
             self.net.load_state_dict(net_weights)
-            fig, ax1 = plt.subplots()
+            fig, (ax1, ax3) = plt.subplots(1, 2, figsize=(9, 4))
             ax2 = ax1.twinx()
 
             xdata = xdata[:i+1]
@@ -119,19 +122,26 @@ class SepLossTrainer:
             for lbl, c, ax, loss in zip(lbls, cmap, axes, loss_logs):
                 ax.plot(xdata, loss, c=c, alpha=.4, label=lbl)
             lines = ax1.lines + ax2.lines
-            plt.title('LR linear range test')
+            fig.suptitle('LR linear range test')
             ax1.set_ylabel('do loss')
             ax2.set_ylabel(','.join(lbls[1:])+' losses')
             ax1.set_xlabel('iteration #')
-            ax1.text(
-                    -.05, -.1, f'extremum at: LR = {x_min_str}',
-                    transform=ax.transAxes, c='red', alpha=.5)
             ax1.axvline(x_min, 0, 1, c='red', ls='--')
-            plt.legend(lines, lbls, loc=9);
+
+            ax3.plot(xdata, loss_logs.mean(0))
+            ax3.set_ylabel('avg loss')
+            ax3.axvline(x_min, 0, 1, c='red', ls='--')
+            ax3.text(
+                    -.05, -.2, f'extremum at: LR = {x_min_str}',
+                    transform=ax3.transAxes, c='red', alpha=.5)
+            plt.legend(lines, lbls, loc=9)
+
+            fig.tight_layout()
+            fig.subplots_adjust(top=0.88);
 
     def exponentialWarmUp(
             self, w, num_iters, batch_size,
-            lr_lims=None, range_test=False, explosion_ratio=1.5):
+            lr_lims=None, range_test=False, explosion_ratio=None):
         """
         Network warm up with exponentailly increasing LR from some small value
         If `range_test` is `True`, then test on more relevant LR will be
@@ -144,29 +154,28 @@ class SepLossTrainer:
         """
         loss_logs = w.new_empty([num_iters, w.nelement()])
         opt_dict = copy.deepcopy(self.optimizer.state_dict())
-        sch_dict = copy.deepcopy(self.scheduler.state_dict())
         if range_test:
             net_weights = copy.deepcopy(self.net.state_dict())
 
         if lr_lims is not None:
             lr_0, lr_n = lr_lims
+            assert lr_n > lr_0 and lr_0 > 0, 'inappropriate range'
             gamma = (lr_n/lr_0)**(1./num_iters)
         else:
             lr_n = self.scheduler.base_lrs[0]
+            assert lr_n != 0, 'zero optimizer lr'
             lr_0 = lr_n*1e-5
             gamma = (1e5)**(1./num_iters)
 
         for par in self.optimizer.param_groups:
             par['lr'] = lr_0
-        self.scheduler.base_lrs[0] = lr_0
-        self.scheduler.gamma = gamma
-        self.scheduler.step_size = 1
+        scheduler = StepLR(self.optimizer, 1, gamma)
         xdata = np.empty(num_iters, 'f4')
 
         desc = 'range test' if range_test else 'warm-up'
         for i in trange(num_iters, desc=desc):
             self.optimizer.zero_grad()
-            xdata[i] = self.scheduler.get_lr()[0]
+            xdata[i] = scheduler.get_last_lr()[0]
 
             batch = self.pde.sampleBatch(batch_size)
             L = self.pde.computeLoss(batch, self.net)
@@ -174,15 +183,15 @@ class SepLossTrainer:
             (w@L).backward()
 
             self.optimizer.step()
-            self.scheduler.step()
-            if (explosion_ratio*loss_logs[0].mean() < (w@L).item()): 
+            scheduler.step()
+            if (explosion_ratio is not None
+                    and explosion_ratio*loss_logs[0].mean() < (w@L).item()): 
                 print('early stop due to loss explosion')
                 break
         self.optimizer.load_state_dict(opt_dict)
-        self.scheduler.load_state_dict(sch_dict)
         if range_test:
             self.net.load_state_dict(net_weights)
-            fig, ax1 = plt.subplots()
+            fig, (ax1, ax3) = plt.subplots(1, 2, figsize=(9, 4))
             ax2 = ax1.twinx()
 
             xdata = xdata[:i+1]
@@ -202,17 +211,24 @@ class SepLossTrainer:
             for lbl, c, ax, loss in zip(lbls, cmap, axes, loss_logs):
                 ax.plot(xdata, loss, c=c, alpha=.4, label=lbl)
             lines = ax1.lines + ax2.lines
-            plt.title('LR exponential range test')
+            fig.suptitle('LR exponential range test')
             ax1.set_ylabel('do loss')
             ax2.set_ylabel(','.join(lbls[1:])+' losses')
             ax1.set_xlabel('iteration #')
             ax1.set_xscale('log')
             ax2.set_xscale('log')
-            ax1.text(
-                    -.05, -.1, f'extremum at: LR = {x_min_str}',
-                    transform=ax.transAxes, c='red', alpha=.5)
-            ax1.axvline(x_min, 0, 1, c='red', ls='--')
+
+            ax3.plot(xdata, loss_logs.mean(0))
+            ax3.set_xscale('log')
+            ax3.set_ylabel('avg loss')
+            ax3.axvline(x_min, 0, 1, c='red', ls='--')
+            ax3.text(
+                    -.05, -.2, f'extremum at: LR = {x_min_str}',
+                    transform=ax3.transAxes, c='red', alpha=.5)
             plt.legend(lines, lbls, loc=9);
+
+            fig.tight_layout()
+            fig.subplots_adjust(top=0.88);
 
     def trainOneEpochWithRAR(
             self, w, num_batches=100, batch_size=128, k=2):
