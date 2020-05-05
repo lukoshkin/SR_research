@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.autograd as autograd
 
-from pdes import D, PDE
+from obsolete.pdes import D, PDE
 
 
 class UpdatedAdvectionPDE(PDE):
