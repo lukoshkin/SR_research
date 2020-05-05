@@ -46,6 +46,17 @@ class UpdatedAdvectionPDE(PDE):
         tx.requires_grad_(False)
         return torch.stack([R_do.abs(), R_ic.abs(), R_bc.abs()])
 
+    def computeGradNorms(self, tx, net):
+        tx.requires_grad_(True)
+        t, x = tx.unbind(1)
+
+        u = net(t, x)
+        u_t, u_x = D(u, (t,x))
+        grad_norms = u_t.abs() + (self.a*u_x).abs()
+
+        tx.requires_grad_(False)
+        return grad_norms
+
     def computeLoss(self, tx, net):
         R = self.computeResiduals(tx, net)
         return R.mean(1)

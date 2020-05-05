@@ -19,7 +19,20 @@ avg_error = lambda u_exact, u_approx: torch.mean(
 
 
 class SepLossTrainer:
-    def __init__(self, net, pde, optimizer, scheduler, pbar=False):
+    def __init__(self, net, pde, optimizer, scheduler,
+            k=None, refinement=None, pbar=False):
+        """
+        Parameters:
+            k : int, None by default
+                hyperparameter in RAR procedure
+
+            refinement: str ('RAR'/'GAR') or None
+                'RAR' - residual-based adaptive refinement
+                'GAR' - gradient-based adaptive refinement
+
+            pbar : bool flag
+                Switch on/off progress bar for epoch training
+        """
         self.No = 0
         self.best_epoch = 0
         self.best_score = float('inf')
@@ -33,6 +46,22 @@ class SepLossTrainer:
         self.scheduler = scheduler
 
         self.meta = None
+        if k is None:
+            self.closure = self._closure
+        elif refinement == 'RAR':
+            assert k >= 1, '[ $k -ge 1 ] must be true'
+            self.closure = self._closureRAR
+            self._k = k
+        elif refinement == 'GAR':
+            assert k >= 1, '[ $k -ge 1 ] must be true'
+            self.closure = self._closureGAR
+            self._k = k
+        else:
+            raise ValueError(
+                    'Invalid refinement procedure\n'
+                    'If k is set, then you must specify'
+                    "'RAR' or 'GAR' as refinement named argument")
+
         self._sbatch = None
         self._eps_0, self._eps_r = 1., 0.
         self._iter = lambda n,s: trange(n, desc=s)
@@ -44,18 +73,86 @@ class SepLossTrainer:
         """
         loss_logs = w.new_empty([num_batches, w.nelement()])
         for i in self._iter(num_batches, f'Epoch {self.No}'):
-            self.optimizer.zero_grad()
+            self.closure(w, batch_size, loss_logs, i)
 
-            batch = self.pde.sampleBatch(batch_size)
-            L = self.pde.computeLoss(batch, self.net)
-            loss_logs[i] = L.data
-            (w@L).backward()
-
-            self.optimizer.step()
         self.scheduler.step()
         self.each_loss_history.append(loss_logs.mean(0).cpu().numpy())
         self.history.append(self.each_loss_history[-1].sum())
         self.No += 1
+
+    def _closure(self, w, batch_size, loss_logs, i):
+        self.optimizer.zero_grad()
+
+        batch = self.pde.sampleBatch(batch_size)
+        L = self.pde.computeLoss(batch, self.net)
+        loss_logs[i] = L.data
+        (w@L).backward()
+
+        self.optimizer.step()
+
+    def _closureRAR(self, w, batch_size, loss_logs, i):
+        self.optimizer.zero_grad()
+        if self._eps_r < self._eps_0:
+            self._sbatch, self._eps_0 = self._makeSuppBatchR(batch_size)
+
+        batch = self.pde.sampleBatch(batch_size)
+        batch_2x = torch.cat([batch, self._sbatch])
+        L = self.pde.computeLoss(batch_2x, self.net)
+        loss_logs[i] = L.data
+        (w@L).backward()
+
+        self.optimizer.step()
+        self._eps_r = self.pde.computeLoss(
+                self._sbatch, self.net)[0].item()
+
+    def _closureGAR(self, w, batch_size, loss_logs, i):
+        self.optimizer.zero_grad()
+        self._sbatch = self._makeSuppBatchG(batch_size)
+
+        batch = self.pde.sampleBatch(batch_size)
+        batch_4x = torch.cat([batch, self._sbatch])
+        L = self.pde.computeLoss(batch_4x, self.net)
+        loss_logs[i] = L.data
+        (w@L).backward()
+
+        self.optimizer.step()
+
+    def _makeSuppBatchR(self, batch_size):
+        """
+        Residual-based Adaptive Refinement
+        Section 2.8, https://arxiv.org/pdf/1907.04502.pdf
+        ---
+        Unfortunately, in the current implementation,
+        it is only possible to make differential op-r refinement
+        since for all loss parts there is a single batch generated
+        """
+        batch = self.pde.sampleBatch(self._k*batch_size)
+        R_do,*_ = self.pde.computeResiduals(batch, self.net)
+        values, indices = R_do.detach().sort()
+        support_batch = batch[indices[-batch_size:]]
+        eps_0 = values[:batch_size].mean().item()
+        return support_batch, eps_0
+
+    def _makeSuppBatchG(self, batch_size):
+        """
+        Gradient-based Adaptive Refinement
+        (my implementation, tell me if sth better exists)
+        ---
+        One calculates the gradients only in the domain
+        interior, since the gradients on the borders are
+        the part of the boundary conditions
+        """
+        batch = self.pde.sampleBatch(self._k*batch_size)
+        GNs = self.pde.computeGradNorms(batch, self.net)
+        _, indices = GNs.detach().sort()
+        support_batch = batch[indices[-batch_size:]]
+        jitter = 5e-3*self.pde._len * batch.new(
+                3, *support_batch.shape).normal_()
+
+        support_batch = (support_batch + jitter).flatten(0, 1)
+        support_batch = torch.max(support_batch, self.pde.lims[:, 0])
+        support_batch = torch.min(support_batch, self.pde.lims[:, 1])
+        return support_batch
 
     def linearWarmUp(
             self, w, num_iters, batch_size,
@@ -77,14 +174,14 @@ class SepLossTrainer:
 
         if lr_lims is not None:
             lr_0, lr_n = lr_lims
-            assert lr_n > lr_0, 'inappropriate range'
+            assert lr_n > lr_0, 'Inappropriate range'
         else:
             lr_n = self.scheduler.base_lrs[0]
-            assert lr_n != 0, 'zero optimizer lr'
+            assert lr_n != 0, 'Zero optimizer lr'
             lr_0 = lr_n / num_iters
         xdata = np.linspace(lr_0, lr_n, num_iters, dtype='f4')
 
-        desc = 'range test' if range_test else 'warm-up'
+        desc = 'Range test' if range_test else 'Warm-up'
         for i in trange(num_iters, desc=desc):
             self.optimizer.zero_grad()
             for par in self.optimizer.param_groups:
@@ -97,7 +194,7 @@ class SepLossTrainer:
             self.optimizer.step()
             if (explosion_ratio is not None
                     and explosion_ratio*loss_logs[0].mean() < (w@L).item()):
-                print('early stop due to the loss explosion')
+                print('Early stop due to the loss explosion')
                 break
         self.optimizer.load_state_dict(opt_dict)
         if range_test:
@@ -159,11 +256,11 @@ class SepLossTrainer:
 
         if lr_lims is not None:
             lr_0, lr_n = lr_lims
-            assert lr_n > lr_0 and lr_0 > 0, 'inappropriate range'
+            assert lr_n > lr_0 and lr_0 > 0, 'Inappropriate range'
             gamma = (lr_n/lr_0)**(1./num_iters)
         else:
             lr_n = self.scheduler.base_lrs[0]
-            assert lr_n != 0, 'zero optimizer lr'
+            assert lr_n != 0, 'Zero optimizer lr'
             lr_0 = lr_n*1e-5
             gamma = (1e5)**(1./num_iters)
 
@@ -172,7 +269,7 @@ class SepLossTrainer:
         scheduler = StepLR(self.optimizer, 1, gamma)
         xdata = np.empty(num_iters, 'f4')
 
-        desc = 'range test' if range_test else 'warm-up'
+        desc = 'Range test' if range_test else 'Warm-up'
         for i in trange(num_iters, desc=desc):
             self.optimizer.zero_grad()
             xdata[i] = scheduler.get_last_lr()[0]
@@ -186,7 +283,7 @@ class SepLossTrainer:
             scheduler.step()
             if (explosion_ratio is not None
                     and explosion_ratio*loss_logs[0].mean() < (w@L).item()): 
-                print('early stop due to loss explosion')
+                print('Early stop due to the loss explosion')
                 break
         self.optimizer.load_state_dict(opt_dict)
         if range_test:
@@ -229,48 +326,6 @@ class SepLossTrainer:
 
             fig.tight_layout()
             fig.subplots_adjust(top=0.88);
-
-    def trainOneEpochWithRAR(
-            self, w, num_batches=100, batch_size=128, k=2):
-        """
-        w       weights for the manual balancing of loss terms
-        k       int, hyperparameter in RAR procedure
-        """
-        loss_logs = w.new_empty([num_batches, w.nelement()])
-        for i in self._iter(num_batches, f'Epoch {self.No}'):
-            self.optimizer.zero_grad()
-            if self._eps_r < self._eps_0:
-                self._sbatch, self._eps_0 = self._makeSupportBatch(
-                        batch_size, k)
-
-            batch = self.pde.sampleBatch(batch_size)
-            batch_2x = torch.cat([batch, self._sbatch])
-            L = self.pde.computeLoss(batch_2x, self.net)
-            loss_logs[i] = L.data
-            (w@L).backward()
-
-            self.optimizer.step()
-            self._eps_r = self.pde.computeLoss(
-                    self._sbatch, self.net)[0].item()
-        self.scheduler.step()
-        self.each_loss_history.append(loss_logs.mean(0).cpu().numpy())
-        self.history.append(self.each_loss_history[-1].sum())
-        self.No += 1
-
-    def _makeSupportBatch(self, batch_size, k):
-        """
-        Residual-based Adaptive Refinement
-        Section 2.8, https://arxiv.org/pdf/1907.04502.pdf
-        ---
-        Unfortunately, in the current implementation,
-        it is only possible to make differential op-r refinement
-        """
-        batch = self.pde.sampleBatch(k*batch_size)
-        R_do,*_ = self.pde.computeResiduals(batch, self.net)
-        values, indices = R_do.detach().sort()
-        support_batch = batch[indices[-batch_size:]]
-        eps_0 = values[:k//2*batch_size].mean().item()
-        return support_batch, eps_0
 
     def trackTrainingScore(self):
         self.meta = 'tranining'
