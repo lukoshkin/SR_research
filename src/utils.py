@@ -193,7 +193,8 @@ class SepLossTrainer:
 
             self.optimizer.step()
             if (explosion_ratio is not None
-                    and explosion_ratio*loss_logs[0].mean() < (w@L).item()):
+                    and explosion_ratio*(
+                        w@loss_logs[0]).item() < (w@L).item()):
                 print('Early stop due to the loss explosion')
                 break
         self.optimizer.load_state_dict(opt_dict)
@@ -282,7 +283,8 @@ class SepLossTrainer:
             self.optimizer.step()
             scheduler.step()
             if (explosion_ratio is not None
-                    and explosion_ratio*loss_logs[0].mean() < (w@L).item()): 
+                    and explosion_ratio*(
+                        w@loss_logs[0]).item() < (w@L).item()):
                 print('Early stop due to the loss explosion')
                 break
         self.optimizer.load_state_dict(opt_dict)

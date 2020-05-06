@@ -84,7 +84,9 @@ class ThinFoilSODE(PDE):
         self.e = 200*theta
 
     def computeResiduals(self, xi, net):
+        xi.squeeze_(-1)
         xi.requires_grad_(True)
+
         x,y,z,h = net(xi).unbind(1)
         u_y = self.Py(xi) - self.e*y
         u_z = self.Pz(xi) - self.e*z
@@ -95,7 +97,7 @@ class ThinFoilSODE(PDE):
         R2 = h*D(y,xi) - u_y
         R3 = h*D(z,xi) - u_z
         R4 = D(h,xi) - self.e*(torch.tanh(8*x/self.theta)-u_ps/(1+u_ps))
-        R_do = torch.cat([R1, R2, R3, R4])
+        R_do = torch.stack([R1, R2, R3, R4])
 
         xi.requires_grad_(False)
         return torch.norm(R_do, dim=0), R_bc.abs()

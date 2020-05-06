@@ -50,6 +50,10 @@ class PDE(nn.Module):
         self._shift = self.lims[:, 0].to(device)
 
     def sampleBatch(self, N):
+        """
+        sample batch of shape (N, d),
+        where d is the number of dimensions in the PDE
+        """
         return self._len * self._len.new(
                 N, len(self.lims)).uniform_() + self._shift
 
