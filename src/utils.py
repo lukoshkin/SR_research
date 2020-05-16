@@ -74,18 +74,20 @@ class SepLossTrainer:
         self._iter = lambda n,s: trange(n, desc=s)
         if not pbar: self._iter = lambda n, s: range(n)
 
-    def trainOneEpoch(self, w, num_batches=100, batch_size=128):
+    def trainOneEpoch(self, w, num_batches=100, batch_size=128, lp=1):
         """
         w : torch.Tensor transfered on the device
             weights for the manual balancing of loss terms
+        lp: int, log period
         """
         loss_logs = w.new_empty([num_batches, w.nelement()])
         for i in self._iter(num_batches, f'Epoch {self.No}'):
             self.closure(w, batch_size, loss_logs, i)
 
         self.scheduler.step()
-        self.each_loss_history.append(loss_logs.mean(0).cpu().numpy())
-        self.history.append(self.each_loss_history[-1].sum())
+        if self.No % lp == 0:
+            self.each_loss_history.append(loss_logs.mean(0).cpu().numpy())
+            self.history.append(self.each_loss_history[-1].sum())
         self.No += 1
 
     def _closure(self, w, batch_size, loss_logs, i):
@@ -272,6 +274,7 @@ class SepLossTrainer:
             self, xdata, loss_logs, mode, explosion_ratio, w, i):
         fig, (ax1, ax3) = plt.subplots(1, 2, figsize=(9, 4))
         ax2 = ax1.twinx()
+        ax4 = ax3.twinx()
 
         xdata = xdata[:i+1]
         loss_logs = loss_logs.cpu().numpy()[:i+1].T
@@ -299,16 +302,20 @@ class SepLossTrainer:
         ax2.set_ylabel(','.join(lbls[1:])+' loss'+suffix)
         ax1.set_ylabel('do loss')
         ax1.set_xlabel('iteration #')
+        ax1.legend(lines, lbls, loc=9);
         if mode == 'expo':
             ax1.set_xscale('log')
             ax2.set_xscale('log')
             ax3.set_xscale('log')
 
-        ax3.plot(xdata, mllog, label='arithmetic mean')
-        ax3.plot(xdata, wllog, label='weighted')
-        ax3.legend(loc=9, fancybox=True, framealpha=.5)
+        ax3.plot(xdata, mllog, alpha=.6, c='dodgerblue')
+        ax4.plot(xdata, wllog, alpha=.6, c='darkorange')
+        lines = ax3.lines+ax4.lines
+        lbls = ['arithmetic mean', 'weighted']
+        ax3.legend(lines, lbls, loc=9)
 
-        ax3.set_ylabel('total loss')
+        ax3.set_ylabel('mean loss')
+        ax4.set_ylabel("loss terms' weighted sum")
         ax3.axvline(x_min, 0, 1, c='red', ls='--', alpha=.5)
         ax3.axvline(x_wmin, 0, 1, c='pink', ls='--', alpha=.5)
         ax3.text(
@@ -317,7 +324,6 @@ class SepLossTrainer:
         ax3.text(
                 .05, -.22, f'weighted loss extremum = {x_wmin_str}',
                 transform=ax3.transAxes, c='pink')
-        plt.legend(lines, lbls, loc=9);
         if explosion_ratio is not None:
             ax1.set_ylim(
                     bottom=.9*loss_logs[0].min(),
@@ -326,11 +332,15 @@ class SepLossTrainer:
                     bottom=.9*loss_logs[1:].min(),
                     top=explosion_ratio*loss_logs[1:, 0].max())
             ax3.set_ylim(
-                    bottom=.9*min(mllog.min(), wllog.min()),
-                    top=explosion_ratio*max(mllog[0], wllog[0]))
+                    bottom=.9*mllog.min(),
+                    top=explosion_ratio*mllog[0])
+            ax4.set_ylim(
+                    bottom=.9*wllog.min(),
+                    top=explosion_ratio*wllog[0])
 
         fig.tight_layout()
         fig.subplots_adjust(top=0.88);
+        print('Minimum loss value (mean):', mllog.mean())
 
     def trackTrainingScore(self):
         self.meta = 'tranining'
