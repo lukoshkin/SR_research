@@ -103,7 +103,7 @@ dependencies:
     - markdown==3.1.1
     - matplotlib==3.1.1
     - nbconvert==5.6.0
-    - nbformat==4.4.0
+    - nbformat==5.0.5
     - networkx==2.3
     - notebook==6.0.1
     - numba==0.45.1

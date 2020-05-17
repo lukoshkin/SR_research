@@ -27,11 +27,11 @@ def minstrX(xdata, ydata):
 
 class SepLossTrainer:
     def __init__(self, net, pde, optimizer, scheduler,
-            k=None, refinement=None, pbar=False):
+            refinement=None, k=None, pbar=False):
         """
         Parameters:
             k : int, None by default
-                hyperparameter in RAR procedure
+                hyperparameter in the refinement procedure
 
             refinement: str ('RAR'/'GAR') or None
                 'RAR' - residual-based adaptive refinement
@@ -53,26 +53,54 @@ class SepLossTrainer:
         self.scheduler = scheduler
 
         self.meta = None
-        if k is None:
-            self.closure = self._closure
-        elif refinement == 'RAR':
-            assert k >= 1, '[ $k -ge 1 ] must be true'
-            self.closure = self._closureRAR
-            self._k = k
-        elif refinement == 'GAR':
-            assert k >= 1, '[ $k -ge 1 ] must be true'
-            self.closure = self._closureGAR
-            self._k = k
-        else:
-            raise ValueError(
-                    'Invalid refinement procedure\n'
-                    'If k is set, then you must specify'
-                    "'RAR' or 'GAR' as refinement named argument")
+        self.refinement = (refinement, k)
 
         self._sbatch = None
         self._eps_0, self._eps_r = 1., 0.
         self._iter = lambda n,s: trange(n, desc=s)
         if not pbar: self._iter = lambda n, s: range(n)
+
+    @property
+    def refinement(self):
+        return self.__refinement
+
+    @refinement.setter
+    def refinement(self, x):
+        try:
+            r, k = x
+        except ValueError:
+            r, k = x, None
+        except TypeError:
+            r, k = x, None
+
+        if k is not None:
+            assert k >= 1, '[ $k -ge 1 ] must be true'
+
+        if r is None:
+            self.__refinement = 'No refinement'
+            self.__closure = self._closure
+            self.__k = None
+        elif r == 'RAR':
+            self.__refinement = r
+            self.__closure = self._closureRAR
+            if k is None: k = 2
+            self.__k = k
+        elif r == 'GAR':
+            self.__refinement = r
+            self.__closure = self._closureGAR
+            if k is None: k = 4
+            self.__k = k
+        else:
+            raise ValueError(
+                    'Invalid refinement procedure.\n'
+                    'If k is set, then you must specify'
+                    "'RAR' or 'GAR' as refinement named argument")
+
+    @refinement.getter
+    def refinement(self):
+        if getattr(self, '_SepLossTrainer__k', None):
+            return self.__refinement, self.__k
+        return self.__refinement
 
     def trainOneEpoch(self, w, num_batches=100, batch_size=128, lp=1):
         """
@@ -82,7 +110,7 @@ class SepLossTrainer:
         """
         loss_logs = w.new_empty([num_batches, w.nelement()])
         for i in self._iter(num_batches, f'Epoch {self.No}'):
-            self.closure(w, batch_size, loss_logs, i)
+            self.__closure(w, batch_size, loss_logs, i)
 
         self.scheduler.step()
         if self.No % lp == 0:
@@ -136,7 +164,7 @@ class SepLossTrainer:
         it is only possible to make differential op-r refinement
         since for all loss parts there is a single batch generated
         """
-        batch = self.pde.sampleBatch(self._k*batch_size)
+        batch = self.pde.sampleBatch(self.__k*batch_size)
         R_do,*_ = self.pde.computeResiduals(batch, self.net)
         values, indices = R_do.detach().sort()
         support_batch = batch[indices[-batch_size:]]
@@ -152,7 +180,7 @@ class SepLossTrainer:
         interior, since the gradients on the borders are
         the part of the boundary conditions
         """
-        batch = self.pde.sampleBatch(self._k*batch_size)
+        batch = self.pde.sampleBatch(self.__k*batch_size)
         GNs = self.pde.computeGradNorms(batch, self.net)
         _, indices = GNs.detach().sort()
         support_batch = batch[indices[-batch_size:]]
