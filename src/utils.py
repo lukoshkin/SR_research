@@ -45,7 +45,6 @@ class SepLossTrainer:
         self.best_score = float('inf')
         self.best_weights = None
         self.history = []
-        self.each_loss_history = []
 
         self.net = net
         self.pde = pde
@@ -56,9 +55,17 @@ class SepLossTrainer:
         self.refinement = (refinement, k)
 
         self._sbatch = None
+        self._history = []
         self._eps_0, self._eps_r = 1., 0.
         self._iter = lambda n,s: trange(n, desc=s)
         if not pbar: self._iter = lambda n, s: range(n)
+
+    def histories(self):
+        """
+        Returns the set of loss histories
+        A separate loss history can be obtained by row slicing
+        """
+        return np.array(self._history).T
 
     @property
     def refinement(self):
@@ -114,8 +121,8 @@ class SepLossTrainer:
 
         self.scheduler.step()
         if self.No % lp == 0:
-            self.each_loss_history.append(loss_logs.mean(0).cpu().numpy())
-            self.history.append(self.each_loss_history[-1].sum())
+            self._history.append(loss_logs.mean(0).cpu().numpy())
+            self.history.append(self._history[-1].sum())
         self.No += 1
 
     def _closure(self, w, batch_size, loss_logs, i):
