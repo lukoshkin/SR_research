@@ -37,11 +37,3 @@ class Anime:
         self.line.set_data(x, y[t])
         if self.string is not None:
             self.ax.set_title(self.string.format(self.text[t]))
-
-def running_mean(signal, ww=80):
-    """
-    Args:
-    -----
-    ww        window width
-    """
-    return np.convolve(signal, np.ones(ww)/ww, mode='valid')

@@ -1,11 +1,60 @@
 import math
-from functools import partial
 
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
 
-from obsolete.pdes import D, PDE
+
+def D(y, x):
+    grad = autograd.grad(
+        outputs=y, inputs=x,
+        grad_outputs=torch.ones_like(y),
+        create_graph=True, allow_unused=True)
+
+    if len(grad) == 1:
+        return grad[0]
+    return grad
+
+
+class PDE(nn.Module):
+    """
+    Base class.
+    Lu = 0, where L is some spatio-temporal operator
+    obeying the boundary conditions
+    ----------
+    Args:
+    -----
+    initial         intial distribution of the function u at some time t0
+    lims            limits specifying the training domain.
+                    It should be pairs `(a,b)` or just right
+                    endpoint `b`
+
+    which_sampler   sampling technique to use
+    """
+    def __init__(self, initial, device, *lims):
+        super().__init__()
+        self.phi = initial
+
+        lims = list(lims)
+        for i, l in enumerate(lims):
+            if (not isinstance(l, tuple)
+                    and not isinstance(l, list)):
+                assert l > 0, 'got incorrect value'
+                lims[i] = (0, l)
+            else:
+                a, b = l
+                assert b > a, 'got incorrect value'
+        self.lims = torch.tensor(lims, dtype=torch.float)
+        self._len = (self.lims[:, 1] - self.lims[:, 0]).to(device)
+        self._shift = self.lims[:, 0].to(device)
+
+    def sampleBatch(self, N):
+        """
+        sample batch of shape (N, d),
+        where d is the number of dimensions in the PDE
+        """
+        return self._len * self._len.new(
+                N, len(self.lims)).uniform_() + self._shift
 
 
 class UpdatedAdvectionPDE(PDE):
@@ -69,17 +118,15 @@ class ThinFoilSODE(PDE):
     ---
     Args:
     ---
-    pulse(a, phi, tau) - function of laser pulse shape.
-    It takes as arguments: `a` - pulse amplitude, `tau`
+    pulse(A, phi, tau) - function of laser pulse shape.
+    It takes as arguments: `A` - pulse amplitude, `tau`
     - pulse duration, and `phi` - pulse phase
     """
     def __init__(
-            self, initial, pulse, A0, xi_0,
-            tau, theta, xi_lims=1., device='cpu'):
+            self, initial, pulse, theta, xi_lims=1., device='cpu'):
         super().__init__(initial, device, xi_lims)
         self.phi = torch.Tensor(initial).to(device)
-        self.Py = partial(pulse, a=A0[0], phi=xi_0[0], tau=tau)
-        self.Pz = partial(pulse, a=A0[1], phi=xi_0[1], tau=tau)
+        self.pulse = pulse
         self.theta = theta
         self.e = 200*theta
 
@@ -88,8 +135,9 @@ class ThinFoilSODE(PDE):
         xi.requires_grad_(True)
 
         x,y,z,h = net(xi).unbind(1)
-        u_y = self.Py(xi) - self.e*y
-        u_z = self.Pz(xi) - self.e*z
+        a_y, a_z = self.pulse(xi)
+        u_y = a_y - self.e*y
+        u_z = a_z - self.e*z
         u_ps = u_y**2 + u_z**2
 
         R_bc = net(xi.new([0.])) - self.phi
