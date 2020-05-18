@@ -1,4 +1,5 @@
 import math
+import torch
 import numpy as np
 
 def pulse_scalar(x, A, phi, tau, freq=1):

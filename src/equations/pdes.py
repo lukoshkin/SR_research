@@ -123,14 +123,25 @@ class ThinFoilSODE(PDE):
     - pulse duration, and `phi` - pulse phase
     """
     def __init__(
-            self, initial, pulse, theta, xi_lims=1., device='cpu'):
+            self, initial, pulse, theta,
+            xi_lims=1., device='cpu', solver=None):
         super().__init__(initial, device, xi_lims)
         self.phi = torch.Tensor(initial).to(device)
         self.pulse = pulse
         self.theta = theta
         self.e = 200*theta
 
-    def computeResiduals(self, xi, net):
+        self._solver = solver
+        self.supervised(solver is not None)
+
+    def supervised(self, flag):
+        if flag:
+            assert self._solver is not None, (
+            'arg::solver: For supervised learning, a solver is required')
+            self.computeResiduals = self._computeResidualsSL
+        else: self.computeResiduals = self._computeResidualsUL
+
+    def _computeResidualsUL(self, xi, net):
         xi.squeeze_(-1)
         xi.requires_grad_(True)
 
@@ -149,6 +160,18 @@ class ThinFoilSODE(PDE):
 
         xi.requires_grad_(False)
         return torch.norm(R_do, dim=0), R_bc.abs()
+
+    def _computeResidualsSL(self, xi, net):
+        xi.squeeze_(-1)
+        Y_pred = net(xi)
+        xi_sorted = torch.sort(xi)[0].cpu().numpy()
+        V = self._solver(xi_sorted)
+        Y = Y_pred.new(Y_pred.shape)
+        Y[:] = torch.tensor(V)
+
+        R_do = Y - Y_pred
+        R_bc = net(xi.new([0.])) - self.phi
+        return torch.norm(R_do, dim=1), R_bc.abs()
 
     def computeLoss(self, xi, net):
         R_do, R_bc = self.computeResiduals(xi, net)

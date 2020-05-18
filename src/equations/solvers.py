@@ -199,6 +199,6 @@ class ThinFoilSolver:
 
         self._fn = force_vector
 
-    def solve(self, xi):
+    def __call__(self, xi):
         return scipy.integrate.odeint(
                 self._fn, self.phi, xi, tfirst=True)

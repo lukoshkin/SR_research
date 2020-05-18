@@ -44,13 +44,6 @@ class SepLossTrainer:
         self._iter = lambda n,s: trange(n, desc=s)
         if not pbar: self._iter = lambda n, s: range(n)
 
-    def histories(self):
-        """
-        Returns the set of loss histories
-        A separate loss history can be obtained by row slicing
-        """
-        return np.array(self._history).T
-
     @property
     def refinement(self):
         return self.__refinement
@@ -92,6 +85,16 @@ class SepLossTrainer:
         if getattr(self, '_SepLossTrainer__k', None):
             return self.__refinement, self.__k
         return self.__refinement
+
+    def supervised(self, flag):
+        self.pde.supervised(flag)
+
+    def histories(self):
+        """
+        Returns the set of loss histories
+        A separate loss history can be obtained by row slicing
+        """
+        return np.array(self._history).T
 
     def trainOneEpoch(self, w, num_batches=100, batch_size=128, lp=1):
         """
