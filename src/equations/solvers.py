@@ -1,6 +1,6 @@
 import math
 import numpy as np
-import scipy
+import scipy.integrate
 import torch
 
 from .utils import *

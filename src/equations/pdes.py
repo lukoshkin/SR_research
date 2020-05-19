@@ -153,8 +153,13 @@ class ThinFoilSODE(PDE):
 
         R_bc = net(xi.new([0.])) - self.phi
         R1 = 2*D(x,xi)*h**2 - (1+u_ps-h**2)
+        R1 = R1 / torch.norm(h**2).item()
+
         R2 = h*D(y,xi) - u_y
+        R2 = R2 / torch.norm(h).item()
         R3 = h*D(z,xi) - u_z
+        R3 = R3 / torch.norm(h).item()
+
         R4 = D(h,xi) - self.e*(torch.tanh(8*x/self.theta)-u_ps/(1+u_ps))
         R_do = torch.stack([R1, R2, R3, R4])
 
@@ -162,6 +167,10 @@ class ThinFoilSODE(PDE):
         return torch.norm(R_do, dim=0), R_bc.abs()
 
     def _computeResidualsSL(self, xi, net):
+        """
+        This is an experimental part (pretty slow).
+        Most likely, if is not reworked, it will be removed in the future
+        """
         xi.squeeze_(-1)
         Y_pred = net(xi)
         xi_sorted = torch.sort(xi)[0].cpu().numpy()

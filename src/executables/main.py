@@ -1,5 +1,6 @@
 import math
 import torch
+import numpy as np
 from torch import optim
 
 import sys
@@ -45,14 +46,14 @@ w = torch.tensor([1./96, 1.], device=device)
 # <---
 
 pde = ThinFoilSODE(
-        rbc, pulse, theta,
+        rbc, p_t, theta,
         xi_lims=xi_lims, device=device, solver=solver)
 net = RNNLikeDGM(1,4, as_array=False).to(device)
 opt = optim.SGD(net.parameters(), 5e-4, weight_decay=5e-7)
 sch = optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, 500, eta_min=5e-7)
 
 trainer = SepLossTrainer(net, pde, opt, sch)
-for i in range(n_cycles):
+for i in range(num_cycles):
     for _ in range(nsl_steps):
         trainer.trainOneEpoch(w, num_batches, batch_size, lp)
         trainer.trackTrainingScore()
@@ -64,5 +65,5 @@ for i in range(n_cycles):
     trainer.supervised(True)
 
 trainer.terminate()
-np.savez('../savings/history', trainer.history, trainer.histories())
-torch.save(trainer.best_weights, '../savings/weights.pt')
+np.savez('../../savings/history', trainer.history, trainer.histories())
+torch.save(trainer.best_weights, '../../savings/weights.pt')
