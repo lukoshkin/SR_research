@@ -98,7 +98,7 @@ class SepLossTrainer:
 
     def trainOneEpoch(self, w, num_batches=100, batch_size=128, lp=1):
         """
-        w : torch.Tensor transfered on the device
+        w : torch.Tensor transferred on the device
             weights for the manual balancing of loss terms
         lp: int, log period
         """
@@ -240,7 +240,7 @@ class SepLossTrainer:
             self, w, batch_size, num_iters=1000,
             lr_lims=None, range_test=False, explosion_ratio=None):
         """
-        Network warm up with exponentailly increasing LR from some small value
+        Network warm up with exponentially increasing LR from some small value
         If `range_test` is `True`, then test on more relevant LR will be
         run instead
 
@@ -293,7 +293,7 @@ class SepLossTrainer:
             displayRTresults(xdata, loss_logs, *args)
 
     def trackTrainingScore(self):
-        self.meta = 'tranining'
+        self.meta = 'training'
         if self.history[-1] < self.best_score:
             self.best_epoch = self.No
             self.best_score = self.history[-1]
@@ -311,4 +311,35 @@ class SepLossTrainer:
         if self.best_weights is not None:
             self.net.load_state_dict(self.best_weights)
         print(f'Best {self.meta} score is {self.best_score}')
-        print(f'Achived at epoch #{self.best_epoch}')
+        print(f'Achieved at epoch #{self.best_epoch}')
+
+
+class SuperArchTrainer:
+    def __init__(self, constnet, flexnet, pde, optimizer, scheduler):
+        self.base = constnet
+        self.fm = flexnet
+        pass
+
+    def trainOneEpoch(self, w, num_batches=100, batch_size=128, lp=1):
+        Pr = w.new_empty([num_batches], dtype=torch.LongTensor)
+        loss_logs = w.new_empty([num_batches, w.nelement()])
+
+        for i in self._iter(num_batches, f'Epoch {self.No}'):
+            self.optimizer.zero_grad()
+            self.fm.refreeze()
+            Pr[i] = self.fm.ll
+
+            net = nn.Sequential(self.base, self.fm)
+            batch = self.pde.sampleBatch(batch_size)
+            L = self.pde.computeLoss(batch, net)
+
+            loss_logs[i] = L.data
+
+        (Pr @ loss_logs @ w).backward()
+        self.optimizer.step()
+
+        self.scheduler.step()
+        if self.No % lp == 0:
+            self._history.append(loss_logs.mean(0).cpu().numpy())
+            self.history.append(self._history[-1].sum())
+        self.No += 1

@@ -3,6 +3,7 @@ import numpy as np
 import scipy.integrate
 import torch
 
+from functools import partial
 from .utils import *
 
 
@@ -181,7 +182,10 @@ class PartialSolver:
 
 
 class ThinFoilSolver:
-    def __init__(self, initial, pulse1, eps, theta, pulse2=None):
+    def __init__(
+            self, initial, pulse1, eps, theta,
+            pulse2=None, scheme='new',
+            xi_lims=None, method='RK45'):
         if pulse2 is None: pulse = pulse1
         else: pulse = pulse1 + pulse2
         self.phi = initial
@@ -197,8 +201,28 @@ class ThinFoilSolver:
             f3 = eps*(E - u_ps/(1+u_ps))
             return [f0,f1,f2,f3]
 
-        self._fn = force_vector
+        if scheme == 'new':
+            if xi_lims is None:
+                raise Exception(
+                        f"for scheme '{scheme}', "
+                        '`xi_lims` must be set')
+            self.scheme = 'new'
+            self.solve = partial(
+                    scipy.integrate.solve_ivp,
+                    force_vector, xi_lims, initial, method)
+        elif scheme == 'old':
+            self.scheme = 'old'
+            self.solve = partial(
+                    scipy.integrate.odeint,
+                        force_vector, initial, tfirst=True)
+        else:
+            raise Exception('scheme: wrong argument')
 
     def __call__(self, xi):
-        return scipy.integrate.odeint(
-                self._fn, self.phi, xi, tfirst=True)
+        res = self.solve(xi)
+        if self.scheme == 'old':
+            xyzh = res.T
+        else:
+            self.state = res
+            xyzh = res.y
+        return xyzh

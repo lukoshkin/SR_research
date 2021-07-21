@@ -1,77 +1,82 @@
 name: SR
 channels:
-  - pytorch
   - conda-forge
+  - pytorch
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
-  - backcall=0.1.0=py_0
+  - argon2-cffi=20.1.0=py37h7b6447c_1
+  - backcall=0.2.0=py_0
   - blas=1.0=mkl
-  - bleach=3.1.4=pyh9f0ad1d_0
-  - ca-certificates=2020.4.5.1=hecc5488_0
-  - certifi=2020.4.5.1=py37hc8dfbb8_0
-  - cffi=1.12.3=py37h2e261b9_0
+  - bleach=3.1.5=py_0
+  - ca-certificates=2020.7.22=0
+  - certifi=2020.6.20=py37_0
+  - cffi=1.14.2=py37he30daa8_0
   - cpuonly=1.0=0
   - defusedxml=0.6.0=py_0
-  - entrypoints=0.3=py37hc8dfbb8_1001
-  - freetype=2.9.1=h8a8886c_1
-  - icu=64.2=he1b5a44_1
-  - importlib-metadata=1.6.0=py37hc8dfbb8_0
-  - importlib_metadata=1.6.0=0
-  - intel-openmp=2019.4=243
-  - ipython_genutils=0.2.0=py_1
+  - entrypoints=0.3=py37_0
+  - freetype=2.10.2=h5ab3b9f_0
+  - icu=58.2=he6710b0_3
+  - importlib-metadata=1.7.0=py37_0
+  - importlib_metadata=1.7.0=0
+  - intel-openmp=2020.1=217
+  - ipython_genutils=0.2.0=py37_0
   - jpeg=9b=h024ee3a_2
-  - jupyter_client=6.1.2=py_0
+  - jupyter_client=6.1.6=py_0
   - jupyter_contrib_core=0.3.3=py_2
   - jupyter_contrib_nbextensions=0.5.1=py37_0
-  - jupyter_core=4.6.3=py37hc8dfbb8_1
+  - jupyter_core=4.6.3=py37_0
   - jupyter_highlight_selected_word=0.2.0=py37_1000
   - jupyter_latex_envs=1.4.6=py37_1000
   - jupyter_nbextensions_configurator=0.4.1=py37_0
-  - libedit=3.1.20181209=hc058e9b_0
-  - libffi=3.2.1=hd88cf55_4
+  - ld_impl_linux-64=2.33.1=h53a641e_7
+  - libedit=3.1.20191231=h14c3975_1
+  - libffi=3.3=he6710b0_2
   - libgcc-ng=9.1.0=hdf63c60_0
-  - libgfortran-ng=7.3.0=hdf63c60_0
-  - libiconv=1.15=h516909a_1006
+  - libgfortran-ng=8.2.0=hdf63c60_1
+  - libiconv=1.15=h63c8f33_5
   - libpng=1.6.37=hbc83047_0
-  - libsodium=1.0.17=h516909a_0
+  - libsodium=1.0.18=h7b6447c_0
   - libstdcxx-ng=9.1.0=hdf63c60_0
-  - libtiff=4.0.10=h2733197_2
-  - libxml2=2.9.10=hee79883_0
-  - libxslt=1.1.33=h31b3aaa_0
-  - lxml=4.5.0=py37he3881c9_1
-  - markupsafe=1.1.1=py37h8f50634_1
-  - mistune=0.8.4=py37h516909a_1000
-  - mkl=2019.4=243
+  - libtiff=4.1.0=h2733197_1
+  - libxml2=2.9.10=he19cac6_1
+  - libxslt=1.1.34=hc22bd24_0
+  - lxml=4.5.2=py37hefd8a0e_0
+  - lz4-c=1.9.2=he6710b0_1
+  - markupsafe=1.1.1=py37h14c3975_1
+  - mistune=0.8.4=py37h14c3975_1001
+  - mkl=2020.1=217
   - mkl-service=2.3.0=py37he904b0f_0
-  - mkl_fft=1.0.14=py37ha843d7b_0
-  - mkl_random=1.1.0=py37hd6b4f25_0
-  - ncurses=6.1=he6710b0_1
-  - ninja=1.9.0=py37hfd86e86_0
-  - numpy-base=1.17.2=py37hde5b4d6_0
+  - mkl_fft=1.1.0=py37h23d657b_0
+  - mkl_random=1.1.1=py37h0573a6f_0
+  - ncurses=6.2=he6710b0_1
+  - ninja=1.10.0=py37hfd86e86_0
+  - numpy-base=1.19.1=py37hfa32c7d_0
   - olefile=0.46=py37_0
-  - openssl=1.1.1f=h516909a_0
-  - pandoc=2.9.2=0
-  - pickleshare=0.7.5=py37hc8dfbb8_1001
-  - pip=19.2.3=py37_0
-  - prometheus_client=0.7.1=py_0
-  - ptyprocess=0.6.0=py_1001
-  - pycparser=2.19=py37_0
-  - python=3.7.4=h265db76_1
+  - openssl=1.1.1g=h7b6447c_0
+  - packaging=20.4=py_0
+  - pandoc=2.10.1=0
+  - pandocfilters=1.4.2=py37_1
+  - pickleshare=0.7.5=py37_1001
+  - pip=20.2.2=py37_0
+  - prometheus_client=0.8.0=py_0
+  - ptyprocess=0.6.0=py37_0
+  - pycparser=2.20=py_2
+  - python=3.7.7=hcff3b4d_5
   - python_abi=3.7=1_cp37m
-  - pyyaml=5.3.1=py37h8f50634_0
-  - readline=7.0=h7b6447c_5
-  - send2trash=1.5.0=py_0
-  - setuptools=41.2.0=py37_0
-  - sqlite=3.29.0=h7b6447c_0
-  - tk=8.6.8=hbc83047_0
-  - wheel=0.33.6=py37_0
-  - xz=5.2.4=h14c3975_4
-  - yaml=0.2.2=h516909a_1
-  - zeromq=4.3.2=he1b5a44_2
+  - pyyaml=5.3.1=py37h7b6447c_1
+  - readline=8.0=h7b6447c_0
+  - send2trash=1.5.0=py37_0
+  - setuptools=49.6.0=py37_0
+  - sqlite=3.33.0=h62c20be_0
+  - tk=8.6.10=hbc83047_0
+  - wheel=0.35.1=py_0
+  - xz=5.2.5=h7b6447c_0
+  - yaml=0.2.5=h7b6447c_0
+  - zeromq=4.3.2=he6710b0_2
   - zipp=3.1.0=py_0
   - zlib=1.2.11=h7b6447c_3
-  - zstd=1.3.7=h0b5b093_0
+  - zstd=1.4.5=h9ceee32_0
   - pip:
     - absl-py==0.8.0
     - astor==0.8.0
@@ -91,6 +96,7 @@ dependencies:
     - ipywidgets==7.5.1
     - jedi==0.15.1
     - jinja2==2.10.1
+    - joblib==0.16.0
     - jsonschema==3.0.2
     - jupyter==1.0.0
     - jupyter-client==5.3.3
@@ -104,15 +110,13 @@ dependencies:
     - matplotlib==3.1.1
     - nbconvert==5.6.0
     - nbformat==5.0.5
-    - networkx==2.3
     - notebook==6.0.1
     - numba==0.45.1
     - numpy==1.17.2
     - opt-einsum==3.1.0
-    - pandocfilters==1.4.2
     - parso==0.5.1
     - pexpect==4.7.0
-    - pillow==6.2.0
+    - pillow==7.2.0
     - prompt-toolkit==2.0.9
     - protobuf==3.9.2
     - pygments==2.4.2
@@ -123,13 +127,16 @@ dependencies:
     - pyzmq==18.1.0
     - qtconsole==4.5.5
     - scikit-image==0.15.0
+    - scikit-learn==0.23.2
     - scipy==1.3.1
     - six==1.12.0
+    - sklearn==0.0
     - termcolor==1.1.0
     - terminado==0.8.2
     - testpath==0.4.2
-    - torch==1.5.0+cpu
-    - torchvision==0.6.0+cpu
+    - threadpoolctl==2.1.0
+    - torch==1.6.0
+    - torchvision==0.7.0
     - tornado==6.0.3
     - tqdm==4.36.1
     - traitlets==4.3.2
@@ -139,4 +146,3 @@ dependencies:
     - widgetsnbextension==3.5.1
     - wrapt==1.11.2
 prefix: /home/lukoshkin/BuildPacks/miniconda3/envs/SR
-
