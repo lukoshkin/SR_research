@@ -59,7 +59,7 @@ pandocfilters==1.4.2
 parso==0.7.0
 pexpect @ file:///tmp/build/80754af9/pexpect_1594383317248/work
 pickleshare @ file:///tmp/build/80754af9/pickleshare_1594384075987/work
-Pillow==7.2.0
+Pillow==9.0.0
 prometheus-client==0.8.0
 prompt-toolkit==3.0.5
 protobuf==3.9.2
