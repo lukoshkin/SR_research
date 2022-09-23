@@ -62,7 +62,7 @@ pickleshare @ file:///tmp/build/80754af9/pickleshare_1594384075987/work
 Pillow==7.2.0
 prometheus-client==0.8.0
 prompt-toolkit==3.0.5
-protobuf==3.9.2
+protobuf==3.18.3
 ptyprocess==0.6.0
 pycparser @ file:///tmp/build/80754af9/pycparser_1594388511720/work
 Pygments==2.6.1
