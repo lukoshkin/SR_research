@@ -4,7 +4,7 @@ astor==0.8.0
 attrs @ file:///tmp/build/80754af9/attrs_1598374659300/work
 backcall==0.2.0
 bleach==3.1.5
-certifi==2020.6.20
+certifi==2022.12.7
 cffi @ file:///tmp/build/80754af9/cffi_1598370813909/work
 cycler==0.10.0
 decorator==4.4.2
